@@ -32,6 +32,7 @@ interface BossConfig {
   enableAi?: number
   sendImgResume?: number
   filterDeadHr?: number
+  allowedHrStatuses?: string | null
   deadStatus?: string
 }
 
@@ -94,6 +95,7 @@ export default function BossPage() {
   const [selectedScale, setSelectedScale] = useState<string[]>([])
   const [selectedStage, setSelectedStage] = useState<string[]>([])
   const [selectedSalary, setSelectedSalary] = useState<string[]>([])
+  const [hrActivityOptions, setHrActivityOptions] = useState<BossOption[]>([])
   const [options, setOptions] = useState<BossOptions>({
     city: [],
     industry: [],
@@ -227,6 +229,9 @@ export default function BossPage() {
           if (list.length > 0) return list[0]
           return raw
         }
+        setHrActivityOptions((data.hrActivityStatuses ?? []).map((status: string, index: number) => ({
+          id: index, type: 'hrActivity', name: status, code: status,
+        })))
         setConfig({
           ...data.config,
           cityCode: normalizeCityCode(data.config.cityCode),
@@ -890,7 +895,7 @@ export default function BossPage() {
                 </div>
               
               {/* HR活跃过滤开关 */}
-              <div className="space-y-2">
+              <div className="flex min-w-0 flex-col gap-2">
                 <Label htmlFor="filterDeadHr">HR活跃过滤</Label>
                 <Select
                   id="filterDeadHr"
@@ -900,8 +905,28 @@ export default function BossPage() {
                   <option value="0">关闭</option>
                   <option value="1">开启</option>
                 </Select>
-                <p className="text-xs text-muted-foreground">开启后将过滤活跃状态包含“年”的HR，但仍保存数据。</p>
+                <p className="text-xs text-muted-foreground">关闭时不限制HR活跃状态；被过滤岗位仍保存。保存配置后，下次启动投递生效。</p>
               </div>
+              {config.filterDeadHr === 1 ? (
+                  <div className="flex min-w-0 flex-col gap-2">
+                    <Label>允许投递的活跃状态（可多选）</Label>
+                    <MultiSelect
+                      ariaLabel="允许投递的HR活跃状态"
+                      options={hrActivityOptions}
+                      selected={parseListString(config.allowedHrStatuses ?? '')}
+                      onChange={values => setConfig(prev => ({ ...prev, allowedHrStatuses: JSON.stringify(values) }))}
+                      placeholder={config.allowedHrStatuses == null ? '尚未配置，选择允许投递的状态' : '未勾选任何状态，将全部跳过'}
+                    />
+                    <Button type="button" variant="outline" size="sm" onClick={() => setConfig(prev => ({
+                      ...prev, allowedHrStatuses: JSON.stringify(['刚刚活跃', '今日活跃', '3日内活跃', '本周活跃']),
+                    }))}>选择最近7天</Button>
+                    <p className="text-xs text-muted-foreground">
+                      {config.allowedHrStatuses == null
+                        ? '当前沿用旧版过滤规则（跳过含“年”的状态）。选择并保存后，仅放行勾选的状态；取消全部勾选将全部跳过。'
+                        : '仅放行勾选的状态，未知或未勾选状态均跳过。取消全部勾选将全部跳过。'}
+                    </p>
+                  </div>
+              ) : null}
               </div>
             </CardContent>
         </Card>
@@ -1270,12 +1295,14 @@ function MultiSelect({
   onChange,
   placeholder,
   onClose,
+  ariaLabel,
 }: {
   options: BossOption[]
   selected: string[]
   onChange: (v: string[]) => void
   placeholder?: string
   onClose?: () => void
+  ariaLabel?: string
 }) {
   const [open, setOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -1388,6 +1415,8 @@ function MultiSelect({
       <button
         ref={buttonRef}
         type="button"
+        aria-label={ariaLabel}
+        aria-expanded={open}
         onClick={() => { const next = !open; setOpen(next); if (!next) onClose?.() }}
         className="flex h-10 w-full items-center justify-between rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm shadow-[inset_0_1px_0_rgba(255,255,255,.25)] transition-all duration-200 hover:bg-white/15 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-cyan-400/40 focus:ring-offset-0"
       >

@@ -14,6 +14,7 @@ import com.getjobs.application.mapper.BossConfigMapper;
 import com.getjobs.application.mapper.BossIndustryMapper;
 import com.getjobs.application.mapper.BossOptionMapper;
 import com.getjobs.worker.boss.BossConfig;
+import com.getjobs.worker.boss.HrActivityFilter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -50,6 +51,39 @@ public class BossService {
     private final BlacklistMapper blacklistMapper;
     private final BossJobDataMapper bossJobDataMapper;
     private final javax.sql.DataSource dataSource;
+
+    /** 补充可选白名单列，不改动旧配置、Cookie或投递记录。 */
+    @jakarta.annotation.PostConstruct
+    public void ensureHrActivityColumn() {
+        try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
+            boolean tableExists = false;
+            boolean columnExists = false;
+            try (ResultSet columns = statement.executeQuery("PRAGMA table_info('boss_config')")) {
+                while (columns.next()) {
+                    tableExists = true;
+                    if ("allowed_hr_statuses".equals(columns.getString("name"))) columnExists = true;
+                }
+            }
+            if (tableExists && !columnExists) {
+                statement.executeUpdate("ALTER TABLE boss_config ADD COLUMN allowed_hr_statuses TEXT");
+            }
+        } catch (java.sql.SQLException e) {
+            throw new IllegalStateException("无法初始化HR活跃过滤配置", e);
+        }
+    }
+
+    /** 内置真实状态，加上历史采集和已保存的状态，兼容平台后续新增的文字。 */
+    public List<String> getHrActivityStatuses() {
+        var statuses = new java.util.LinkedHashSet<>(HrActivityFilter.KNOWN_STATUSES);
+        QueryWrapper<BossJobDataEntity> query = new QueryWrapper<>();
+        query.select("DISTINCT hr_active_status").isNotNull("hr_active_status").orderByAsc("hr_active_status");
+        for (Object value : bossJobDataMapper.selectObjs(query)) {
+            if (value instanceof String status && !status.isBlank()) statuses.add(status.strip());
+        }
+        BossConfigEntity config = getFirstConfig();
+        if (config != null) statuses.addAll(parseListString(config.getAllowedHrStatuses()));
+        return List.copyOf(statuses);
+    }
 
     // ==================== Option相关方法 ====================
 
@@ -242,6 +276,7 @@ public class BossService {
         if (partial.getDebugger() != null) existing.setDebugger(partial.getDebugger());
         if (partial.getEnableAi() != null) existing.setEnableAi(partial.getEnableAi());
         if (partial.getFilterDeadHr() != null) existing.setFilterDeadHr(partial.getFilterDeadHr());
+        if (partial.getAllowedHrStatuses() != null) existing.setAllowedHrStatuses(partial.getAllowedHrStatuses());
         if (partial.getSendImgResume() != null) existing.setSendImgResume(partial.getSendImgResume());
         if (partial.getWaitTime() != null) existing.setWaitTime(partial.getWaitTime());
 
@@ -293,6 +328,8 @@ public class BossService {
         config.setDebugger(entity.getDebugger() != null && entity.getDebugger() == 1);
         config.setEnableAI(entity.getEnableAi() != null && entity.getEnableAi() == 1);
         config.setFilterDeadHR(entity.getFilterDeadHr() != null && entity.getFilterDeadHr() == 1);
+        config.setAllowedHrStatuses(entity.getAllowedHrStatuses() == null
+                ? null : parseListString(entity.getAllowedHrStatuses()));
         config.setSendImgResume(entity.getSendImgResume() != null && entity.getSendImgResume() == 1);
         config.setWaitTime(entity.getWaitTime() != null ? String.valueOf(entity.getWaitTime()) : null);
 

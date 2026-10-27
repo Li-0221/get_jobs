@@ -84,6 +84,9 @@ public class BossConfig {
      */
     private Boolean filterDeadHR;
 
+    /** HR活跃状态白名单；null 表示尚未配置，空列表表示不放行任何状态。 */
+    private List<String> allowedHrStatuses;
+
     /**
      * 是否发送图片简历
      */

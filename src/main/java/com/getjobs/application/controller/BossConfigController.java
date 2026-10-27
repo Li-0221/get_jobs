@@ -69,6 +69,7 @@ public class BossConfigController {
 
         result.put("config", config);
         result.put("options", options);
+        result.put("hrActivityStatuses", bossService.getHrActivityStatuses());
         result.put("blacklist", blacklist);
         result.put("resumeImage", bossResumeImageService.getMetadata());
 
@@ -82,6 +83,9 @@ public class BossConfigController {
   public BossConfigEntity updateConfig(@RequestBody BossConfigEntity config) {
         // 关键词标准化：将来自前端的逗号分隔或括号列表统一转换为 JSON 字符串列表
         config.setKeywords(normalizeKeywords(config.getKeywords()));
+        if (config.getAllowedHrStatuses() != null) {
+            config.setAllowedHrStatuses(normalizeKeywords(config.getAllowedHrStatuses()));
+        }
 
         // 将前端可能传来的『代码列表』转换并保存成『中文名称列表/值』
         // 城市：保存中文名（单值）
